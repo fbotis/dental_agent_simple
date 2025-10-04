@@ -1,0 +1,114 @@
+================================================================================
+DENTAL CLINIC ASSISTANT CONVERSATION LOG
+================================================================================
+Conversation ID: 20251004_110459_153
+Start Time: 2025-10-04 11:04:59
+================================================================================
+
+[11:05:00.148] 🔄 CONTEXT_UPDATE
+[11:05:01.691] LLM_RESPONSE: Bună ziua! Ați sunat la Clinica Dentară Zâmbet Strălucitor. Cu ce vă pot ajuta astăzi?
+🧠 LLM THINKING: Bună ziua! Ați sunat la Clinica Dentară Zâmbet Strălucitor. Cu ce vă pot ajuta astăzi?
+
+[11:05:04.089] USER_STARTED_SPEAKING
+[11:05:05.048] USER_STOPPED_SPEAKING
+[11:05:05.261] USER_SPEECH: Bună ziua!
+
+👤 USER: Bună ziua!
+[11:05:06.969] LLM_RESPONSE: Bună ziua! Mulțumim că ați sunat la Clinica Dentară Zâmbet Strălucitor. Cu ce vă pot ajuta astăzi?
+🧠 LLM THINKING: Bună ziua! Mulțumim că ați sunat la Clinica Dentară Zâmbet Strălucitor. Cu ce vă pot ajuta astăzi?
+
+[11:05:09.384] USER_STARTED_SPEAKING
+[11:05:11.184] USER_STOPPED_SPEAKING
+[11:05:11.277] USER_SPEECH: Aș dori să fac o programare.
+
+👤 USER: Aș dori să fac o programare.
+[11:05:12.356] 📞 FUNCTION CALL: schedule_appointment(no args)
+[11:05:12.356] ✅ FUNCTION RESULT: schedule_appointment
+[11:05:12.359] 🔄 CONTEXT_UPDATE
+[11:05:13.501] LLM_RESPONSE: Desigur! Pentru a continua cu programarea, vă rog să îmi spuneți numele complet și numărul dumneavoastră de telefon.
+🧠 LLM THINKING: Desigur! Pentru a continua cu programarea, vă rog să îmi spuneți numele complet și numărul dumneavoastră de telefon.
+
+[11:05:16.269] BOT_STARTED_SPEAKING
+[11:05:16.625] USER_STARTED_SPEAKING
+[11:05:16.629] BOT_STOPPED_SPEAKING
+[11:05:20.858] USER_SPEECH: Dorin Botici, 0756 571 782.
+
+👤 USER: Dorin Botici, 0756 571 782.
+[11:05:20.888] USER_STOPPED_SPEAKING
+[11:05:22.037] 📞 FUNCTION CALL: provide_patient_info(patient_name=Dorin Botici, phone_number=0756 571 782)
+[11:05:22.037] ✅ FUNCTION RESULT: provide_patient_info
+[11:05:22.040] 🔄 CONTEXT_UPDATE
+[11:05:22.977] LLM_RESPONSE: Vă rog să-mi spuneți ce tip de consultație doriți sau dacă aveți nevoie de mai multe informații despre serviciile noastre disponibile.
+🧠 LLM THINKING: Vă rog să-mi spuneți ce tip de consultație doriți sau dacă aveți nevoie de mai multe informații despre serviciile noastre disponibile.
+
+[11:05:25.967] BOT_STARTED_SPEAKING
+[11:05:26.796] BOT_STOPPED_SPEAKING
+[11:05:27.049] USER_STARTED_SPEAKING
+[11:05:29.139] USER_SPEECH: Consultație generală.
+
+👤 USER: Consultație generală.
+[11:05:29.208] USER_STOPPED_SPEAKING
+[11:05:29.885] 📞 FUNCTION CALL: select_service(service_type=Stomatologie Generală)
+[11:05:29.885] ✅ FUNCTION RESULT: select_service
+[11:05:29.890] 🔄 CONTEXT_UPDATE
+[11:05:30.496] LLM_RESPONSE: Când ați dori să veniți la consultație?
+🧠 LLM THINKING: Când ați dori să veniți la consultație?
+
+[11:05:32.888] USER_STARTED_SPEAKING
+[11:05:34.177] USER_SPEECH: Mâine, la ora 12.
+
+👤 USER: Mâine, la ora 12.
+[11:05:34.345] USER_STOPPED_SPEAKING
+[11:05:35.593] 📞 FUNCTION CALL: select_date_time(preferred_date=2025-10-05, preferred_time=12:00)
+[11:05:35.593] ✅ FUNCTION RESULT: select_date_time
+[11:05:35.608] 🔄 CONTEXT_UPDATE
+[11:05:36.905] LLM_RESPONSE: Vă rog să confirmați următoarele detalii ale consultației dumneavoastră:
+
+- Nume: Dorin Botici
+- Telefon: 0756 571 782
+- Serviciu: Stomatologie Generală
+- Data: 2025-10-05
+- Ora: 12:00
+
+Este totul în regulă pentru a confirma programarea?
+🧠 LLM THINKING: Vă rog să confirmați următoarele detalii ale consultației dumneavoastră:
+
+- Nume: Dorin Botici
+- Telefon: 0756 571 782
+- Serviciu: Stomatologie Generală
+- Data: 2025-10-05
+- Ora: 12:00
+
+Este totul în regulă pentru a confirma programarea?
+
+[11:05:39.904] BOT_STARTED_SPEAKING
+[11:05:40.726] BOT_STOPPED_SPEAKING
+[11:05:42.705] USER_STARTED_SPEAKING
+[11:05:43.928] USER_STOPPED_SPEAKING
+[11:05:44.206] USER_SPEECH: Da, este în regulă.
+
+👤 USER: Da, este în regulă.
+[11:05:45.731] 📞 FUNCTION CALL: confirm_appointment(no args)
+[11:05:45.731] ✅ FUNCTION RESULT: confirm_appointment
+[11:05:45.745] 🔄 CONTEXT_UPDATE
+[11:05:46.517] 📞 FUNCTION CALL: end_conversation(no args)
+[11:05:46.517] ✅ FUNCTION RESULT: end_conversation
+[11:05:46.519] 🔄 CONTEXT_UPDATE
+
+================================================================================
+CONVERSATION SUMMARY
+================================================================================
+End Time: 2025-10-04 11:05:46
+Duration: 0:00:47.366291
+Total Events: 42
+
+Event Breakdown:
+  - BOT_STARTED_SPEAKING: 3
+  - BOT_STOPPED_SPEAKING: 3
+  - FUNCTION_CALL: 6
+  - FUNCTION_RESULT: 6
+  - LLM_RESPONSE: 6
+  - USER_SPEECH: 6
+  - USER_STARTED_SPEAKING: 6
+  - USER_STOPPED_SPEAKING: 6
+================================================================================

@@ -1,0 +1,13 @@
+================================================================================
+DENTAL CLINIC ASSISTANT CONVERSATION LOG
+================================================================================
+Conversation ID: 20251004_135501_467
+Start Time: 2025-10-04 13:55:01
+================================================================================
+
+[13:55:02.488] 🔄 CONTEXT_UPDATE
+[13:55:04.583] LLM_RESPONSE: Bună ziua! Ați sunat la Clinica Dentară Zâmbet Strălucitor. Cu ce vă pot ajuta astăzi?
+🧠 LLM THINKING: Bună ziua! Ați sunat la Clinica Dentară Zâmbet Strălucitor. Cu ce vă pot ajuta astăzi?
+
+[13:55:07.275] BOT_STARTED_SPEAKING
+[13:55:08.098] BOT_STOPPED_SPEAKING
