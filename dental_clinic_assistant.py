@@ -30,6 +30,7 @@ from pipecat_flows import FlowManager
 
 try:
     from .appointment_systems import AppointmentSystemFactory, AppointmentSystemInterface
+    from .audio_recorder import AudioRecorder
     from .clinic_info import ClinicInfo
     from .conversation_handlers import ConversationState, ConversationHandlers
     from .conversation_logger import ConversationLogger
@@ -37,6 +38,7 @@ try:
     from .metrics_observer import MetricsFileObserver
 except ImportError:
     from appointment_systems import AppointmentSystemFactory, AppointmentSystemInterface
+    from audio_recorder import AudioRecorder
     from clinic_info import ClinicInfo
     from conversation_handlers import ConversationState, ConversationHandlers
     from conversation_logger import ConversationLogger
@@ -130,6 +132,13 @@ class DentalClinicAssistant:
         metrics_observer = MetricsFileObserver("metrics.log")
         conversation_logger = ConversationLogger("conversations")
 
+        # Audio recorder for debugging (controlled by env var)
+        audio_recording_enabled = os.getenv("ENABLE_AUDIO_RECORDING", "false").lower() == "true"
+        audio_recorder = AudioRecorder(
+            recordings_dir="recordings",
+            enabled=audio_recording_enabled
+        )
+
         task = PipelineTask(
             pipeline,
             params=PipelineParams(
@@ -137,7 +146,7 @@ class DentalClinicAssistant:
                 enable_metrics=True,
                 enable_usage_metrics=True
             ),
-            observers=[metrics_observer, conversation_logger]
+            observers=[metrics_observer, conversation_logger, audio_recorder]
         )
 
         # Initialize flow manager

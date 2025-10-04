@@ -34,5 +34,7 @@ build/
 .idea
 service-account-credentials.json
 conversations/
+recordings/
 repo-to-text*
 *.log
+metrics.log
