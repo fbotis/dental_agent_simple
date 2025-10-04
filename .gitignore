@@ -1,0 +1,34 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE and Editor files
+.vscode/        # VS Code
+.idea/          # PyCharm
+*.sublime-project
+*.sublime-workspace
+
+# Virtual Environment
+.venv/
+venv/
+env/
+# uv-specific directories
+.uv/
+
+# uv lockfile (optional, depends on your preference)
+# uv.lock
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Installer files
+*.whl
+*.tar.gz
+
+# OS generated files
+.DS_Store
+.env
+.idea
