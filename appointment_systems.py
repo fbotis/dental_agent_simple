@@ -9,6 +9,7 @@
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from googleapiclient.discovery import build
@@ -460,8 +461,9 @@ Cost estimat: {service_details.get("price", "N/A")}
             return None
 
     def _parse_datetime(self, date: str, time: str):
-        """Parse date and time strings into datetime object."""
-        return datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+        """Parse date and time strings into datetime object with Bucharest timezone."""
+        naive_dt = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+        return naive_dt.replace(tzinfo=ZoneInfo("Europe/Bucharest"))
 
     def _add_minutes(self, dt, minutes: int):
         """Add minutes to datetime object."""

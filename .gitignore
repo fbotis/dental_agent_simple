@@ -33,3 +33,6 @@ build/
 .env
 .idea
 service-account-credentials.json
+conversations/
+repo-to-text*
+*.log

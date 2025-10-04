@@ -202,6 +202,11 @@ NU spune "am programat" sau "veți fi contactat" - programarea se face DOAR prin
             for service in self.clinic_info.services.values()
         ])
 
+        dentists_list = "\n".join([
+            f"- {dentist['name']} ({dentist['specialty']})"
+            for dentist in self.clinic_info.dentists
+        ])
+
         return NodeConfig(
             name="service_selection",
             task_messages=[
@@ -212,9 +217,13 @@ NU spune "am programat" sau "veți fi contactat" - programarea se face DOAR prin
 Serviciile noastre disponibile sunt:
 {services_list}
 
+Doctorii noștri:
+{dentists_list}
+
 IMPORTANT:
 - Dacă pacientul întreabă despre servicii sau vrea detalii despre proceduri, TREBUIE să folosești funcția get_services_info
 - Dacă pacientul alege un serviciu direct, folosește funcția select_service
+- Dacă pacientul menționează un doctor preferat, folosește select_service cu parametrul preferred_doctor
 - Nu explica serviciile tu însuți - folosește funcția get_services_info pentru asta"""
                 }
             ],
@@ -234,18 +243,33 @@ IMPORTANT:
         }
         current_day_ro = day_names_ro.get(current_day, current_day)
 
+        # Check if a doctor preference exists
+        preferred_doctor = self.conversation_state.get("patient_info", {}).get("preferred_doctor")
+        doctor_context = f"\n\nVeți căuta disponibilități pentru {preferred_doctor}." if preferred_doctor else ""
+
+        dentists_list = "\n".join([
+            f"- {dentist['name']} ({dentist['specialty']})"
+            for dentist in self.clinic_info.dentists
+        ])
+
         return NodeConfig(
             name="date_time_selection",
             task_messages=[
                 {
                     "role": "system",
-                    "content": f"""Perfect! Acum trebuie să găsesc o oră disponibilă pentru consultația dumneavoastră.
+                    "content": f"""Perfect! Acum trebuie să găsesc o oră disponibilă pentru consultația dumneavoastră.{doctor_context}
 
 Programul nostru este Luni-Joi de la 8:00 la 18:00, Vineri de la 8:00 la 16:00, și Sâmbăta de la 9:00 la 14:00. Suntem închiși Duminica.
 
+Doctorii noștri disponibili:
+{dentists_list}
+
 **DATA CURENTĂ: {current_day_ro}, {current_date}**
 
-IMPORTANT: Întreabă NATURAL "Ce zi și ce oră v-ar conveni?" sau "Când ați dori să veniți?" - NU da exemple cu "puteți spune...". Sună ca o conversație telefonică normală.
+IMPORTANT:
+- Dacă pacientul menționează un doctor preferat, folosește funcția select_doctor ÎNAINTE de select_date_time
+- Dacă pacientul întreabă despre disponibilitatea unui doctor specific, folosește funcția select_doctor
+- Întreabă NATURAL "Ce zi și ce oră v-ar conveni?" sau "Când ați dori să veniți?" - NU da exemple cu "puteți spune...". Sună ca o conversație telefonică normală.
 
 INSTRUCȚIUNI CRITICE pentru parsarea datei și orei:
 
@@ -282,16 +306,30 @@ Exemplu: Dacă pacientul spune "luni la prima oră" și astăzi este {current_da
         available_times = ", ".join(
             self.conversation_state.get("available_slots", []))
 
+        preferred_doctor = self.conversation_state.get("patient_info", {}).get("preferred_doctor")
+        doctor_context = f" pentru {preferred_doctor}" if preferred_doctor else ""
+
+        dentists_list = "\n".join([
+            f"- {dentist['name']}"
+            for dentist in self.clinic_info.dentists
+        ])
+
         return NodeConfig(
             name="alternative_times",
             task_messages=[
                 {
                     "role": "system",
-                    "content": f"""Îmi pare rău, dar acel interval orar nu este disponibil. Cu toate acestea, am aceste ore disponibile în data preferată:
+                    "content": f"""Îmi pare rău, dar acel interval orar nu este disponibil{doctor_context}. Cu toate acestea, am aceste ore disponibile în data preferată:
 
 {available_times}
 
-Vă rog selectați una din aceste ore disponibile, sau spuneți-mi dacă ați dori să încercați o altă dată."""
+OPȚIUNI:
+- Selectați una din aceste ore folosind funcția select_alternative_time
+- Încercați o altă dată folosind funcția select_date_time
+- Schimbați doctorul preferat folosind funcția select_doctor
+
+Doctori disponibili:
+{dentists_list}"""
                 }
             ],
             functions=functions
@@ -306,6 +344,7 @@ Vă rog selectați una din aceste ore disponibile, sau spuneți-mi dacă ați do
         # Format date to be more readable
         date_str = patient_info.get('date', 'N/A')
         time_str = patient_info.get('time', 'N/A')
+        preferred_doctor = patient_info.get('preferred_doctor', 'Dr. Ana Popescu')
 
         return NodeConfig(
             name="appointment_confirmation",
@@ -319,6 +358,7 @@ TREBUIE să citiți TOATE aceste detalii pacientului:
 Nume: {patient_info.get('name', 'N/A')}
 Telefon: {patient_info.get('phone', 'N/A')}
 Serviciu: {service_details.get('name', patient_info.get('service', 'N/A'))}
+Doctor: {preferred_doctor}
 Data: {date_str}
 Ora: {time_str}
 Durata: {service_details.get('duration', 'N/A')} minute

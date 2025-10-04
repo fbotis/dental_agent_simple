@@ -151,28 +151,66 @@ class ConversationHandlers:
                      self.get_services_info, self.back_to_main]
         return None, self.node_factory.create_service_selection_node(functions)
 
-    async def select_service(self, flow_manager: FlowManager, service_type: str) -> Tuple[None, NodeConfig]:
-        """Patient selects the dental service they need."""
+    async def select_service(self, flow_manager: FlowManager, service_type: str, preferred_doctor: Optional[str] = None) -> Tuple[None, NodeConfig]:
+        """Patient selects the dental service they need, optionally with a preferred doctor."""
         self.conversation_state.patient_info["service"] = service_type
-        functions = [self.select_date_time, self.back_to_main]
+
+        # Store preferred doctor if provided
+        if preferred_doctor:
+            self.conversation_state.patient_info["preferred_doctor"] = preferred_doctor
+            print(f"✅ Preferred doctor selected: {preferred_doctor}")
+
+        functions = [self.select_date_time, self.select_doctor, self.back_to_main]
         return None, self.node_factory.create_date_time_selection_node(functions)
 
     async def select_date_time(self, flow_manager: FlowManager,
                                preferred_date: str, preferred_time: str) -> Tuple[None, NodeConfig]:
         """Patient selects preferred date and time for appointment."""
-        if self.appointment_system.check_availability(preferred_date, preferred_time):
+        # Get preferred doctor if specified
+        preferred_doctor = self.conversation_state.patient_info.get("preferred_doctor")
+
+        # Check availability considering doctor preference
+        if self.appointment_system.check_availability(preferred_date, preferred_time, doctor=preferred_doctor):
             self.conversation_state.patient_info["date"] = preferred_date
             self.conversation_state.patient_info["time"] = preferred_time
             functions = [self.confirm_appointment,
                          self.modify_appointment_details, self.back_to_main]
             return None, self.node_factory.create_appointment_confirmation_node(functions)
         else:
+            # Get available slots for the preferred doctor
             available_slots = self.appointment_system.get_available_slots(
-                preferred_date)
+                preferred_date, doctor=preferred_doctor)
             self.conversation_state.available_slots = available_slots
             functions = [self.select_alternative_time,
-                         self.select_date_time, self.back_to_main]
+                         self.select_date_time, self.select_doctor, self.back_to_main]
             return None, self.node_factory.create_alternative_times_node(functions)
+
+    async def select_doctor(self, flow_manager: FlowManager, doctor_name: str) -> Tuple[None, NodeConfig]:
+        """Patient selects or changes their preferred doctor."""
+        self.conversation_state.patient_info["preferred_doctor"] = doctor_name
+        print(f"✅ Doctor preference updated: {doctor_name}")
+
+        # If we already have a date/time selected, re-check availability with new doctor
+        if self.conversation_state.patient_info.get("date") and self.conversation_state.patient_info.get("time"):
+            date = self.conversation_state.patient_info["date"]
+            time = self.conversation_state.patient_info["time"]
+
+            # Re-check availability with the new doctor
+            if self.appointment_system.check_availability(date, time, doctor=doctor_name):
+                functions = [self.confirm_appointment,
+                             self.modify_appointment_details, self.back_to_main]
+                return None, self.node_factory.create_appointment_confirmation_node(functions)
+            else:
+                # Show alternative times for this doctor
+                available_slots = self.appointment_system.get_available_slots(date, doctor=doctor_name)
+                self.conversation_state.available_slots = available_slots
+                functions = [self.select_alternative_time,
+                             self.select_date_time, self.back_to_main]
+                return None, self.node_factory.create_alternative_times_node(functions)
+        else:
+            # No date/time selected yet, go to date/time selection
+            functions = [self.select_date_time, self.back_to_main]
+            return None, self.node_factory.create_date_time_selection_node(functions)
 
     async def select_alternative_time(self, flow_manager: FlowManager,
                                       selected_time: str) -> Tuple[None, NodeConfig]:
@@ -198,7 +236,8 @@ class ConversationHandlers:
             phone=patient_info["phone"],
             date=patient_info["date"],
             time=patient_info["time"],
-            service=patient_info["service"]
+            service=patient_info["service"],
+            dentist=patient_info.get("preferred_doctor")
         )
 
         print(f"📝 Appointment ID received: {appointment_id}")
