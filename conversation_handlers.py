@@ -54,13 +54,22 @@ class ConversationHandlers:
         ]
         return None, self.node_factory.create_info_node(functions)
 
+    async def get_clinic_info_from_confirmation(self, flow_manager: FlowManager) -> Tuple[None, NodeConfig]:
+        """User wants clinic info while in confirmation - preserve appointment state."""
+        functions = [
+            self.return_to_confirmation, self.get_services_info_from_confirmation,
+            self.get_dentist_info_from_confirmation, self.back_to_main
+        ]
+        return None, self.node_factory.create_info_node_with_return(functions)
+
     async def get_services_info(self, flow_manager: FlowManager) -> Tuple[None, NodeConfig]:
         """User wants information about dental services."""
         # Check if we're in the middle of booking (patient info exists)
         if self.conversation_state.patient_info.get("name"):
             # During booking flow - allow return to service selection
             functions = [
-                self.return_to_service_selection, self.select_service, self.back_to_main
+                self.return_to_service_selection, self.select_service,
+                self.get_dentist_info, self.back_to_main
             ]
         else:
             # General info request - standard navigation
@@ -70,6 +79,14 @@ class ConversationHandlers:
             ]
         return None, self.node_factory.create_services_node(functions)
 
+    async def get_services_info_from_confirmation(self, flow_manager: FlowManager) -> Tuple[None, NodeConfig]:
+        """User wants services info while in confirmation - preserve appointment state."""
+        functions = [
+            self.return_to_confirmation, self.get_clinic_info_from_confirmation,
+            self.get_dentist_info_from_confirmation, self.back_to_main
+        ]
+        return None, self.node_factory.create_services_node_with_return(functions)
+
     async def get_dentist_info(self, flow_manager: FlowManager) -> Tuple[None, NodeConfig]:
         """User wants information about dentists."""
         functions = [
@@ -77,6 +94,25 @@ class ConversationHandlers:
             self.schedule_appointment, self.back_to_main
         ]
         return None, self.node_factory.create_dentist_node(functions)
+
+    async def get_dentist_info_from_confirmation(self, flow_manager: FlowManager) -> Tuple[None, NodeConfig]:
+        """User wants dentist info while in confirmation - preserve appointment state."""
+        functions = [
+            self.return_to_confirmation, self.get_clinic_info_from_confirmation,
+            self.get_services_info_from_confirmation, self.back_to_main
+        ]
+        return None, self.node_factory.create_dentist_node_with_return(functions)
+
+    async def return_to_confirmation(self, flow_manager: FlowManager) -> Tuple[None, NodeConfig]:
+        """Return to appointment confirmation after viewing info."""
+        functions = [
+            self.confirm_appointment,
+            self.modify_appointment_details,
+            self.get_clinic_info_from_confirmation,
+            self.get_services_info_from_confirmation,
+            self.back_to_main
+        ]
+        return None, self.node_factory.create_appointment_confirmation_node(functions)
 
     # Appointment scheduling handlers
 
@@ -99,7 +135,8 @@ class ConversationHandlers:
             # If we already have patient info, skip straight to date/time selection
             if has_patient_info:
                 print(f"✅ Patient info already exists, skipping to date/time selection")
-                functions = [self.select_date_time, self.back_to_main]
+                functions = [self.check_date_time_availability, self.select_date_time,
+                             self.select_doctor, self.back_to_main]
                 return None, self.node_factory.create_date_time_selection_node(functions)
 
             # Otherwise, show symptom triage and ask for patient info
@@ -138,17 +175,18 @@ class ConversationHandlers:
 
         # If we already have a service from symptom triage, skip to date/time selection
         if self.conversation_state.patient_info.get("service"):
-            functions = [self.select_date_time, self.back_to_main]
+            functions = [self.check_date_time_availability, self.select_date_time,
+                         self.select_doctor, self.back_to_main]
             return None, self.node_factory.create_date_time_selection_node(functions)
 
         functions = [self.select_service, self.get_services_info,
-                     self.handle_symptoms, self.back_to_main]
+                     self.get_dentist_info, self.handle_symptoms, self.back_to_main]
         return None, self.node_factory.create_service_selection_node(functions)
 
     async def return_to_service_selection(self, flow_manager: FlowManager) -> Tuple[None, NodeConfig]:
         """Return to service selection (used after viewing services info during booking)."""
-        functions = [self.select_service,
-                     self.get_services_info, self.back_to_main]
+        functions = [self.select_service, self.get_services_info,
+                     self.get_dentist_info, self.back_to_main]
         return None, self.node_factory.create_service_selection_node(functions)
 
     async def select_service(self, flow_manager: FlowManager, service_type: str, preferred_doctor: Optional[str] = None) -> Tuple[None, NodeConfig]:
@@ -160,8 +198,34 @@ class ConversationHandlers:
             self.conversation_state.patient_info["preferred_doctor"] = preferred_doctor
             print(f"✅ Preferred doctor selected: {preferred_doctor}")
 
-        functions = [self.select_date_time, self.select_doctor, self.back_to_main]
+        functions = [self.check_date_time_availability, self.select_date_time,
+                     self.select_doctor, self.back_to_main]
         return None, self.node_factory.create_date_time_selection_node(functions)
+
+    async def check_date_time_availability(self, flow_manager: FlowManager,
+                                           requested_date: str, requested_time: str) -> Tuple[None, NodeConfig]:
+        """Patient asks if a specific date and time is available (not selecting yet)."""
+        preferred_doctor = self.conversation_state.patient_info.get("preferred_doctor")
+
+        # Check if the requested date/time is available
+        is_available = self.appointment_system.check_availability(requested_date, requested_time, doctor=preferred_doctor)
+
+        if is_available:
+            # Time is available - prompt them to confirm
+            self.conversation_state.patient_info["suggested_date"] = requested_date
+            self.conversation_state.patient_info["suggested_time"] = requested_time
+            functions = [self.select_date_time, self.check_date_time_availability, self.back_to_main]
+            return None, self.node_factory.create_datetime_available_confirmation_node(
+                functions, requested_date, requested_time
+            )
+        else:
+            # Time not available - show alternatives
+            available_slots = self.appointment_system.get_available_slots(requested_date, doctor=preferred_doctor)
+            self.conversation_state.available_slots = available_slots
+            self.conversation_state.patient_info["date"] = requested_date
+            functions = [self.select_alternative_time, self.check_specific_time_availability,
+                         self.select_date_time, self.check_date_time_availability, self.select_doctor, self.back_to_main]
+            return None, self.node_factory.create_alternative_times_node(functions)
 
     async def select_date_time(self, flow_manager: FlowManager,
                                preferred_date: str, preferred_time: str) -> Tuple[None, NodeConfig]:
@@ -174,15 +238,20 @@ class ConversationHandlers:
             self.conversation_state.patient_info["date"] = preferred_date
             self.conversation_state.patient_info["time"] = preferred_time
             functions = [self.confirm_appointment,
-                         self.modify_appointment_details, self.back_to_main]
+                         self.modify_appointment_details,
+                         self.get_clinic_info_from_confirmation,
+                         self.get_services_info_from_confirmation,
+                         self.back_to_main]
             return None, self.node_factory.create_appointment_confirmation_node(functions)
         else:
             # Get available slots for the preferred doctor
             available_slots = self.appointment_system.get_available_slots(
                 preferred_date, doctor=preferred_doctor)
             self.conversation_state.available_slots = available_slots
-            functions = [self.select_alternative_time,
-                         self.select_date_time, self.select_doctor, self.back_to_main]
+            # Store the last requested date for check_specific_time_availability
+            self.conversation_state.patient_info["date"] = preferred_date
+            functions = [self.select_alternative_time, self.check_specific_time_availability,
+                         self.select_date_time, self.check_date_time_availability, self.select_doctor, self.back_to_main]
             return None, self.node_factory.create_alternative_times_node(functions)
 
     async def select_doctor(self, flow_manager: FlowManager, doctor_name: str) -> Tuple[None, NodeConfig]:
@@ -209,15 +278,40 @@ class ConversationHandlers:
                 return None, self.node_factory.create_alternative_times_node(functions)
         else:
             # No date/time selected yet, go to date/time selection
-            functions = [self.select_date_time, self.back_to_main]
+            functions = [self.check_date_time_availability, self.select_date_time,
+                         self.back_to_main]
             return None, self.node_factory.create_date_time_selection_node(functions)
+
+    async def check_specific_time_availability(self, flow_manager: FlowManager, requested_time: str) -> Tuple[None, NodeConfig]:
+        """Patient asks if a specific time is available (not selecting yet)."""
+        preferred_doctor = self.conversation_state.patient_info.get("preferred_doctor")
+        date = self.conversation_state.patient_info.get("date") or self.conversation_state.get("last_requested_date", "")
+
+        # Check if the requested time is available
+        is_available = self.appointment_system.check_availability(date, requested_time, doctor=preferred_doctor)
+
+        if is_available:
+            # Time is available - prompt them to select it
+            self.conversation_state.patient_info["suggested_time"] = requested_time
+            functions = [self.select_alternative_time, self.select_date_time, self.back_to_main]
+            return None, self.node_factory.create_time_available_confirmation_node(functions, requested_time)
+        else:
+            # Time not available - show alternatives again
+            available_slots = self.appointment_system.get_available_slots(date, doctor=preferred_doctor)
+            self.conversation_state.available_slots = available_slots
+            functions = [self.select_alternative_time, self.check_specific_time_availability,
+                         self.select_date_time, self.select_doctor, self.back_to_main]
+            return None, self.node_factory.create_alternative_times_node(functions)
 
     async def select_alternative_time(self, flow_manager: FlowManager,
                                       selected_time: str) -> Tuple[None, NodeConfig]:
         """Patient selects an alternative time from available slots."""
         self.conversation_state.patient_info["time"] = selected_time
         functions = [self.confirm_appointment,
-                     self.modify_appointment_details, self.back_to_main]
+                     self.modify_appointment_details,
+                     self.get_clinic_info_from_confirmation,
+                     self.get_services_info_from_confirmation,
+                     self.back_to_main]
         return None, self.node_factory.create_appointment_confirmation_node(functions)
 
     async def confirm_appointment(self, flow_manager: FlowManager) -> Tuple[None, NodeConfig]:
@@ -255,7 +349,8 @@ class ConversationHandlers:
 
     async def modify_appointment_details(self, flow_manager: FlowManager) -> Tuple[None, NodeConfig]:
         """Patient wants to change some details before confirmation."""
-        functions = [self.select_service, self.back_to_main]
+        functions = [self.select_service, self.get_services_info,
+                     self.get_dentist_info, self.select_doctor, self.back_to_main]
         return None, self.node_factory.create_service_selection_node(functions)
 
     async def appointment_complete(self, flow_manager: FlowManager, needs_help: bool) -> Tuple[None, NodeConfig]:
@@ -278,6 +373,19 @@ class ConversationHandlers:
         functions = [self.find_existing_appointment, self.back_to_main]
         return None, self.node_factory.create_manage_appointment_node(functions)
 
+    async def view_appointment_details(self, flow_manager: FlowManager) -> Tuple[None, NodeConfig]:
+        """Patient wants to view/review current appointment details again."""
+        # Stay in the same node to keep showing the appointment details
+        functions = [self.view_appointment_details, self.cancel_existing_appointment,
+                     self.reschedule_existing_appointment, self.back_to_main]
+        return None, self.node_factory.create_existing_appointment_options_node(functions)
+
+    async def retry_appointment_search(self, flow_manager: FlowManager) -> Tuple[None, NodeConfig]:
+        """Stay in appointment not found node to allow retry."""
+        functions = [self.find_existing_appointment,
+                     self.schedule_appointment, self.back_to_main]
+        return None, self.node_factory.create_appointment_not_found_node(functions)
+
     async def find_existing_appointment(self, flow_manager: FlowManager,
                                         patient_name: str,
                                         phone_number: Optional[str] = None) -> Tuple[None, NodeConfig]:
@@ -287,11 +395,11 @@ class ConversationHandlers:
         if appointment:
             self.conversation_state.current_appointment = appointment["id"]
             self.conversation_state.found_appointment = appointment
-            functions = [self.cancel_existing_appointment,
+            functions = [self.view_appointment_details, self.cancel_existing_appointment,
                          self.reschedule_existing_appointment, self.back_to_main]
             return None, self.node_factory.create_existing_appointment_options_node(functions)
         else:
-            functions = [self.find_existing_appointment,
+            functions = [self.retry_appointment_search, self.find_existing_appointment,
                          self.schedule_appointment, self.back_to_main]
             return None, self.node_factory.create_appointment_not_found_node(functions)
 

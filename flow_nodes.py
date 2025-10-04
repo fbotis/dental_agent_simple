@@ -6,8 +6,10 @@
 
 """Flow node factory and management for the dental clinic assistant."""
 
+import os
 from datetime import datetime
 from typing import Dict, List
+from zoneinfo import ZoneInfo
 from pipecat_flows import NodeConfig
 try:
     from .clinic_info import ClinicInfo
@@ -21,11 +23,17 @@ class FlowNodeFactory:
     def __init__(self, clinic_info: ClinicInfo, conversation_state: Dict):
         self.clinic_info = clinic_info
         self.conversation_state = conversation_state
+        # Get timezone from environment, default to Europe/Bucharest
+        self.timezone = ZoneInfo(os.getenv('TIMEZONE', 'Europe/Bucharest'))
+
+    def _get_current_datetime(self):
+        """Get current datetime in the configured timezone."""
+        return datetime.now(self.timezone)
 
     def create_initial_node(self, functions: List) -> NodeConfig:
         """Create the initial routing node."""
         # Get current date and time for context
-        now = datetime.now()
+        now = self._get_current_datetime()
         current_date = now.strftime("%Y-%m-%d")
         current_time = now.strftime("%H:%M")
         current_day = now.strftime("%A")  # Day of week in English
@@ -51,7 +59,7 @@ class FlowNodeFactory:
 
 🚨 REGULI CRITICE - ZERO EXCEPȚII:
 1. OBLIGATORIU: Fiecare răspuns TREBUIE să includă EXACT O funcție apelată
-2. INTERZIS: NU răspunzi NICIODATĂ fără să apelez o funcție
+2. INTERZIS: NU răspunzi NICIODATĂ fără să apelezi o funcție
 3. INTERZIS: NU spui "am programat" sau "voi programa" - doar funcțiile pot face programări
 4. INTERZIS: NU confirmi acțiuni care nu au fost făcute prin funcții
 5. Dacă nu știi ce funcție, folosește back_to_main
@@ -102,6 +110,35 @@ Răspunde la orice întrebări specifice despre locație, program sau informați
             functions=functions
         )
 
+    def create_info_node_with_return(self, functions: List) -> NodeConfig:
+        """Create the clinic information node that preserves booking context."""
+        return NodeConfig(
+            name="clinic_info_from_confirmation",
+            task_messages=[
+                {
+                    "role": "system",
+                    "content": f"""Oferă informații despre {self.clinic_info.name}:
+
+**Locație și Contact:**
+- Adresă: {self.clinic_info.address}
+- Telefon: {self.clinic_info.phone}
+- Email: {self.clinic_info.email}
+
+**Program de lucru:**
+- Luni-Joi: {self.clinic_info.hours['monday']}
+- Vineri: {self.clinic_info.hours['friday']}
+- Sâmbătă: {self.clinic_info.hours['saturday']}
+- Duminică: {self.clinic_info.hours['sunday']}
+
+**Îngrijire de urgență:**
+{self.clinic_info.emergency}
+
+Răspunde la întrebarea pacientului, apoi OBLIGATORIU folosește funcția return_to_confirmation pentru a reveni la confirmarea programării."""
+                }
+            ],
+            functions=functions
+        )
+
     def create_services_node(self, functions: List) -> NodeConfig:
         """Create the services information node."""
         return NodeConfig(
@@ -113,7 +150,37 @@ Răspunde la orice întrebări specifice despre locație, program sau informați
 
 {self.clinic_info.get_services_text()}
 
-Folosim echipamente de ultimă generație și cele mai noi tehnici. Toate procedurile sunt efectuate cu confortul pacientului ca prioritate principală. Răspunde la orice întrebări specifice despre proceduri, prețuri sau la ce să se aștepte. Dacă vor să programeze o consultație pentru orice serviciu, folosește funcția schedule_appointment."""
+Folosim echipamente de ultimă generație și cele mai noi tehnici. Toate procedurile sunt efectuate cu confortul pacientului ca prioritate principală.
+
+IMPORTANT - Diferența dintre întrebare și selecție:
+- Dacă pacientul ÎNTREABĂ despre doctori (ex: "Spuneți-mi despre Dr. X", "Cine este Dr. X?", "Detalii despre Dr. X?") → folosește get_dentist_info
+- Dacă pacientul ALEGE un doctor (ex: "Vreau la Dr. X", "Aleg Dr. X") → folosește select_service cu preferred_doctor
+
+Răspunde la orice întrebări specifice despre proceduri, prețuri sau la ce să se aștepte. Dacă vor să programeze o consultație pentru orice serviciu, folosește funcția schedule_appointment."""
+                }
+            ],
+            functions=functions
+        )
+
+    def create_services_node_with_return(self, functions: List) -> NodeConfig:
+        """Create the services information node that preserves booking context."""
+        return NodeConfig(
+            name="services_info_from_confirmation",
+            task_messages=[
+                {
+                    "role": "system",
+                    "content": f"""Oferă informații despre serviciile noastre stomatologice:
+
+{self.clinic_info.get_services_text()}
+
+Folosim echipamente de ultimă generație și cele mai noi tehnici. Toate procedurile sunt efectuate cu confortul pacientului ca prioritate principală.
+
+IMPORTANT - Dacă pacientul întreabă despre doctori:
+- Folosește funcția get_dentist_info_from_confirmation pentru a oferi detalii despre doctori
+- NU folosi select_service când pacientul ÎNTREABĂ despre un doctor
+- Folosește select_service doar când pacientul ALEGE explicit un serviciu
+
+Răspunde la întrebarea pacientului despre servicii, apoi OBLIGATORIU folosește funcția return_to_confirmation pentru a reveni la confirmarea programării."""
                 }
             ],
             functions=functions
@@ -131,6 +198,23 @@ Folosim echipamente de ultimă generație și cele mai noi tehnici. Toate proced
 {self.clinic_info.get_dentists_text()}
 
 Toți doctorii noștri sunt profesioniști licențiați angajați să ofere îngrijire stomatologică excelentă. Ei se țin la curent cu cele mai noi tehnici și tehnologii stomatologice prin educație continuă. Răspunde la orice întrebări despre doctori specifici sau specialitățile lor."""
+                }
+            ],
+            functions=functions
+        )
+
+    def create_dentist_node_with_return(self, functions: List) -> NodeConfig:
+        """Create the dentist information node that preserves booking context."""
+        return NodeConfig(
+            name="dentist_info_from_confirmation",
+            task_messages=[
+                {
+                    "role": "system",
+                    "content": f"""Oferă informații despre echipa noastră medicală experimentată:
+
+{self.clinic_info.get_dentists_text()}
+
+Toți doctorii noștri sunt profesioniști licențiați angajați să ofere îngrijire stomatologică excelentă. Ei se țin la curent cu cele mai noi tehnici și tehnologii stomatologice prin educație continuă. Răspunde la întrebarea pacientului despre doctori, apoi OBLIGATORIU folosește funcția return_to_confirmation pentru a reveni la confirmarea programării."""
                 }
             ],
             functions=functions
@@ -220,11 +304,18 @@ Serviciile noastre disponibile sunt:
 Doctorii noștri:
 {dentists_list}
 
-IMPORTANT:
-- Dacă pacientul întreabă despre servicii sau vrea detalii despre proceduri, TREBUIE să folosești funcția get_services_info
-- Dacă pacientul alege un serviciu direct, folosește funcția select_service
-- Dacă pacientul menționează un doctor preferat, folosește select_service cu parametrul preferred_doctor
-- Nu explica serviciile tu însuți - folosește funcția get_services_info pentru asta"""
+IMPORTANT - Diferența dintre întrebare și selecție:
+
+**Întrebări despre informații:**
+- Despre servicii/proceduri → get_services_info
+- Despre doctori (ex: "Spuneți-mi despre Dr. X", "Mai multe detalii despre Dr. X", "La ce doctor aveți disponibil?") → get_dentist_info
+- NU folosi select_service când pacientul ÎNTREABĂ
+
+**Selecții:**
+- Când pacientul ALEGE un serviciu (ex: "Vreau albire dentară", "Aleg detartraj") → select_service
+- Când pacientul ALEGE un doctor (ex: "Vreau la Dr. X", "Prefer Dr. X") → select_service cu preferred_doctor
+
+Nu explica serviciile sau doctorii tu însuți - folosește funcțiile get_services_info sau get_dentist_info pentru asta."""
                 }
             ],
             functions=functions
@@ -232,7 +323,7 @@ IMPORTANT:
 
     def create_date_time_selection_node(self, functions: List) -> NodeConfig:
         """Create the date and time selection node."""
-        now = datetime.now()
+        now = self._get_current_datetime()
         current_date = now.strftime("%Y-%m-%d")
         current_day = now.strftime("%A")
 
@@ -244,7 +335,8 @@ IMPORTANT:
         current_day_ro = day_names_ro.get(current_day, current_day)
 
         # Check if a doctor preference exists
-        preferred_doctor = self.conversation_state.get("patient_info", {}).get("preferred_doctor")
+        preferred_doctor = self.conversation_state.get(
+            "patient_info", {}).get("preferred_doctor")
         doctor_context = f"\n\nVeți căuta disponibilități pentru {preferred_doctor}." if preferred_doctor else ""
 
         dentists_list = "\n".join([
@@ -266,10 +358,25 @@ Doctorii noștri disponibili:
 
 **DATA CURENTĂ: {current_day_ro}, {current_date}**
 
-IMPORTANT:
-- Dacă pacientul menționează un doctor preferat, folosește funcția select_doctor ÎNAINTE de select_date_time
-- Dacă pacientul întreabă despre disponibilitatea unui doctor specific, folosește funcția select_doctor
-- Întreabă NATURAL "Ce zi și ce oră v-ar conveni?" sau "Când ați dori să veniți?" - NU da exemple cu "puteți spune...". Sună ca o conversație telefonică normală.
+IMPORTANT - Diferența dintre întrebare și selecție:
+
+**Dacă pacientul ÎNTREABĂ** despre disponibilitate (identifică cuvintele cheie: "aveți disponibil", "este liber", "puteți", "se poate"):
+- Exemplu: "Mâine la 12:00 aveți disponibil?"
+- Exemplu: "Este liber marți la 14:00?"
+- Exemplu: "Aveți ceva liber săptămâna viitoare?"
+- FOLOSEȘTE funcția check_date_time_availability cu data și ora calculate
+
+**Dacă pacientul SELECTEAZĂ/PREFERĂ** o dată și oră (identifică cuvinte precum "vreau", "aleg", "prefer", "mă convine"):
+- Exemplu: "Vreau mâine la 12:00"
+- Exemplu: "Prefer marți la 14:00"
+- Exemplu: "Mă convine vineri dimineața"
+- FOLOSEȘTE funcția select_date_time
+
+**Pentru doctori:**
+- Dacă pacientul menționează un doctor preferat → select_doctor ÎNAINTE de select_date_time
+- Dacă pacientul întreabă despre disponibilitatea unui doctor specific → select_doctor
+
+Întreabă NATURAL "Ce zi și ce oră v-ar conveni?" sau "Când ați dori să veniți?" - NU da exemple cu "puteți spune...". Sună ca o conversație telefonică normală.
 
 INSTRUCȚIUNI CRITICE pentru parsarea datei și orei:
 
@@ -306,7 +413,8 @@ Exemplu: Dacă pacientul spune "luni la prima oră" și astăzi este {current_da
         available_times = ", ".join(
             self.conversation_state.get("available_slots", []))
 
-        preferred_doctor = self.conversation_state.get("patient_info", {}).get("preferred_doctor")
+        preferred_doctor = self.conversation_state.get(
+            "patient_info", {}).get("preferred_doctor")
         doctor_context = f" pentru {preferred_doctor}" if preferred_doctor else ""
 
         dentists_list = "\n".join([
@@ -323,13 +431,60 @@ Exemplu: Dacă pacientul spune "luni la prima oră" și astăzi este {current_da
 
 {available_times}
 
-OPȚIUNI:
-- Selectați una din aceste ore folosind funcția select_alternative_time
-- Încercați o altă dată folosind funcția select_date_time
-- Schimbați doctorul preferat folosind funcția select_doctor
+REGULI CRITICE - Diferența dintre întrebare și selecție:
+
+1. **Dacă pacientul ÎNTREABĂ** despre disponibilitate (ex: "Nu aveți altă oră?", "Aveți la ora X?", "Ce ziceți de ora Y?"):
+   - Folosește funcția check_specific_time_availability cu ora menționată
+   - Funcția va verifica disponibilitatea și va răspunde
+
+2. **Dacă pacientul SELECTEAZĂ** explicit o oră (ex: "Vreau ora 10", "Aleg 14:00", "Perfect, iau 12:00", "Da, confirmați 10:00"):
+   - Folosește funcția select_alternative_time cu ora aleasă
+
+3. **Dacă pacientul vrea altă dată sau doctor**:
+   - Pentru altă dată → select_date_time
+   - Pentru alt doctor → select_doctor
 
 Doctori disponibili:
 {dentists_list}"""
+                }
+            ],
+            functions=functions
+        )
+
+    def create_time_available_confirmation_node(self, functions: List, requested_time: str) -> NodeConfig:
+        """Create node confirming a requested time is available."""
+        return NodeConfig(
+            name="time_available_confirmation",
+            task_messages=[
+                {
+                    "role": "system",
+                    "content": f"""Bună veste! Ora {requested_time} este disponibilă.
+
+IMPORTANT:
+- Confirmă pacientului că ora {requested_time} ESTE disponibilă
+- Întreabă dacă dorește să rezerve această oră
+- Dacă pacientul confirmă (da, perfect, ok, vreau, aleg) → folosește select_alternative_time cu ora {requested_time}
+- Dacă pacientul vrea altceva → oferă opțiuni cu select_date_time sau alte funcții"""
+                }
+            ],
+            functions=functions
+        )
+
+    def create_datetime_available_confirmation_node(self, functions: List, requested_date: str, requested_time: str) -> NodeConfig:
+        """Create node confirming a requested date and time is available."""
+        return NodeConfig(
+            name="datetime_available_confirmation",
+            task_messages=[
+                {
+                    "role": "system",
+                    "content": f"""Bună veste! Data {requested_date} la ora {requested_time} este disponibilă.
+
+IMPORTANT:
+- Confirmă pacientului că data {requested_date} la ora {requested_time} ESTE disponibilă
+- Întreabă dacă dorește să rezerve această dată și oră
+- Dacă pacientul confirmă (da, perfect, ok, vreau, aleg, rezervați) → folosește select_date_time cu exact aceste valori: preferred_date={requested_date}, preferred_time={requested_time}
+- Dacă pacientul întreabă despre alte date/ore → folosește check_date_time_availability
+- Dacă pacientul vrea să exploreze alte opțiuni → oferă funcțiile disponibile"""
                 }
             ],
             functions=functions
@@ -344,7 +499,8 @@ Doctori disponibili:
         # Format date to be more readable
         date_str = patient_info.get('date', 'N/A')
         time_str = patient_info.get('time', 'N/A')
-        preferred_doctor = patient_info.get('preferred_doctor', 'Dr. Ana Popescu')
+        preferred_doctor = patient_info.get(
+            'preferred_doctor', 'Dr. Ana Popescu')
 
         return NodeConfig(
             name="appointment_confirmation",
@@ -365,6 +521,12 @@ Durata: {service_details.get('duration', 'N/A')} minute
 Cost estimat: {service_details.get('price', 'N/A')}
 
 După ce ai citit TOATE detaliile, întreabă NATURAL: "Confirmăm programarea?" sau "Totul este în regulă?"
+
+IMPORTANT - Dacă pacientul întreabă ceva înainte de a confirma:
+- Despre program/locație/contact → folosește get_clinic_info_from_confirmation
+- Despre servicii/proceduri → folosește get_services_info_from_confirmation
+- Despre doctori → folosește get_dentist_info_from_confirmation
+- Aceste funcții vor PĂSTRA datele programării și vor reveni aici după răspuns
 
 Dacă pacientul confirmă (da, ok, perfect, etc.) → folosește funcția confirm_appointment
 Dacă pacientul vrea schimbări → folosește funcția modify_appointment_details"""
@@ -436,7 +598,7 @@ Odată ce găsesc consultația, vă pot ajuta să o anulați, reprogramați sau 
             task_messages=[
                 {
                     "role": "system",
-                    "content": f"""Am găsit consultația dumneavoastră! Iată detaliile:
+                    "content": f"""Am găsit consultația dumneavoastră! Iată detaliile complete:
 
 **Pacient:** {appointment.get('patient_name', 'N/A')}
 **Serviciu:** {appointment.get('service', 'N/A')}
@@ -445,7 +607,19 @@ Odată ce găsesc consultația, vă pot ajuta să o anulați, reprogramați sau 
 **Doctor:** {appointment.get('dentist', 'N/A')}
 **Confirmare:** {appointment.get('id', 'N/A')}
 
-Ce ați dori să faceți cu această consultație?"""
+IMPORTANT:
+- CITEȘTE TOATE detaliile programării pacientului
+- Dacă pacientul întreabă despre programare (ex: "Când am făcut programarea?", "Care este data?", "La ce oră?", "Cu ce doctor?"):
+  * Răspunde cu detaliile de mai sus
+  * Apoi OBLIGATORIU folosește view_appointment_details pentru a rămâne în acest nod
+  * NU folosi back_to_main când răspunzi la întrebări despre programare
+- Întreabă: "Doriți să anulați sau să reprogramați această consultație?"
+
+Opțiuni disponibile:
+- Dacă pacientul are întrebări despre detalii → view_appointment_details
+- Pentru anulare → cancel_existing_appointment
+- Pentru reprogramare → reschedule_existing_appointment
+- Dacă pacientul vrea altceva complet diferit → back_to_main"""
                 }
             ],
             functions=functions
@@ -458,16 +632,22 @@ Ce ați dori să faceți cu această consultație?"""
             task_messages=[
                 {
                     "role": "system",
-                    "content": f"""Nu am putut găsi o consultație cu acele informații. Acest lucru s-ar putea datora:
+                    "content": f"""IMPORTANT: TREBUIE să informezi pacientul că NU am găsit o consultație cu datele furnizate.
 
+Spune pacientului:
+"Îmi pare rău, dar nu am găsit nicio consultație pe numele furnizat. Acest lucru s-ar putea datora:
 - Consultația a fost deja anulată
-- Numele sau numărul de telefon nu se potrivește cu înregistrările noastre
-- Ar putea fi o diferență de ortografie
+- Numele sau numărul de telefon nu se potrivește exact cu înregistrările noastre
+- Ar putea fi o diferență de ortografie în nume"
 
-Ați dori să:
-1. Încercați din nou căutarea cu informații diferite
-2. Programați o consultație nouă
-3. Sunați direct la cabinetul nostru la {self.clinic_info.phone} pentru asistență"""
+Apoi întreabă ce ar dori să facă:
+1. Să încerce din nou căutarea cu informații diferite → find_existing_appointment (când furnizează un nou nume)
+2. Să programeze o consultație nouă → schedule_appointment
+3. Pentru asistență telefonică → oferă numărul {self.clinic_info.phone}, apoi retry_appointment_search
+
+IMPORTANT:
+- Dacă pacientul vrea să încerce din nou sau are întrebări → retry_appointment_search
+- NU folosi back_to_main până nu oferi aceste opțiuni"""
                 }
             ],
             functions=functions
@@ -509,7 +689,7 @@ Mai este ceva cu care vă pot ajuta?"""
 
     def create_reschedule_node(self, functions: List) -> NodeConfig:
         """Create the reschedule node."""
-        now = datetime.now()
+        now = self._get_current_datetime()
         current_date = now.strftime("%Y-%m-%d")
 
         return NodeConfig(
