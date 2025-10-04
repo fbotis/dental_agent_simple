@@ -32,3 +32,4 @@ build/
 .DS_Store
 .env
 .idea
+service-account-credentials.json
