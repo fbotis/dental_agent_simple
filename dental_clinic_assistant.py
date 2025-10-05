@@ -213,6 +213,12 @@ class DentalClinicAssistant:
         @transport.event_handler("on_client_connected")
         async def on_client_connected(transport, client):
             logger.info("Client connected")
+
+            # Start audio recording if enabled
+            if audio_buffer_processor:
+                await audio_buffer_processor.start_recording()
+                logger.info("🎙️  Started audio recording")
+
             # Get initial functions from conversation handlers
             initial_functions = [
                 self.conversation_handlers.get_clinic_info,
