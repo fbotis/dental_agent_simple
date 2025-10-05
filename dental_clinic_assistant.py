@@ -11,11 +11,13 @@ from typing import Dict, List
 
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.frames.frames import EndFrame, LLMMessagesAppendFrame, TTSSpeakFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
+from pipecat.processors.user_idle_processor import UserIdleProcessor
 from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.transcriptions.language import Language
@@ -118,26 +120,74 @@ class DentalClinicAssistant:
         context = LLMContext()
         context_aggregator = LLMContextAggregatorPair(context)
 
-        pipeline = Pipeline([
-            transport.input(),
-            stt,
-            context_aggregator.user(),
-            llm,
-            tts,
-            transport.output(),
-            context_aggregator.assistant(),
-        ])
-
-        # Create observers
-        metrics_observer = MetricsFileObserver("metrics.log")
-        conversation_logger = ConversationLogger("conversations")
-
         # Audio recorder for debugging (controlled by env var)
         audio_recording_enabled = os.getenv("ENABLE_AUDIO_RECORDING", "false").lower() == "true"
         audio_recorder = AudioRecorder(
             recordings_dir="recordings",
             enabled=audio_recording_enabled
         )
+
+        # Create audio buffer processor for recording
+        audio_buffer_processor = audio_recorder.create_processor()
+
+        # Create task reference for idle handler (will be set later)
+        task_ref = {"task": None}
+
+        # User idle handler - handles when user doesn't speak for 15 seconds
+        async def handle_user_idle(user_idle: UserIdleProcessor, retry_count: int) -> bool:
+            """Handle user idle timeout."""
+            logger.info(f"⏰ User idle detected (retry_count: {retry_count})")
+
+            if retry_count == 1:
+                # First attempt (15 seconds): Ask if they're there
+                logger.info("🔔 Sending first idle prompt")
+                message = {
+                    "role": "system",
+                    "content": "Utilizatorul nu a răspuns de 15 secunde. Întreabă politicos și scurt: 'Mă auziți? Sunteți acolo?'"
+                }
+                await user_idle.push_frame(LLMMessagesAppendFrame([message], run_llm=True))
+                return True  # Continue monitoring
+
+            elif retry_count == 2:
+                # Second attempt (another 15 seconds = 30 total): End call
+                logger.info("⏹️  Ending call due to user inactivity")
+                await user_idle.push_frame(
+                    TTSSpeakFrame("Vă mulțumesc că ați sunat. O zi bună!")
+                )
+                # End the conversation
+                if task_ref["task"]:
+                    await task_ref["task"].queue_frame(EndFrame())
+                return False  # Stop monitoring
+
+            return False
+
+        # Create user idle processor with 15 second timeout
+        user_idle = UserIdleProcessor(
+            callback=handle_user_idle,
+            timeout=15.0  # 15 seconds
+        )
+
+        # Build pipeline - add user idle processor after STT
+        pipeline_components = [
+            transport.input(),
+            stt,
+            user_idle,  # Add idle detector after STT
+            context_aggregator.user(),
+            llm,
+            tts,
+            transport.output(),
+            context_aggregator.assistant(),
+        ]
+
+        # Add audio buffer processor after output if enabled
+        if audio_buffer_processor:
+            pipeline_components.append(audio_buffer_processor)
+
+        pipeline = Pipeline(pipeline_components)
+
+        # Create observers
+        metrics_observer = MetricsFileObserver("metrics.log")
+        conversation_logger = ConversationLogger("conversations")
 
         task = PipelineTask(
             pipeline,
@@ -146,8 +196,11 @@ class DentalClinicAssistant:
                 enable_metrics=True,
                 enable_usage_metrics=True
             ),
-            observers=[metrics_observer, conversation_logger, audio_recorder]
+            observers=[metrics_observer, conversation_logger]
         )
+
+        # Set task reference for idle handler
+        task_ref["task"] = task
 
         # Initialize flow manager
         flow_manager = FlowManager(
